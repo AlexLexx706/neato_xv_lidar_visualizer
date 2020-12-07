@@ -111,17 +111,11 @@ def read_Lidar():
     nb_errors = 0
     while True:
         try:
-            time.sleep(0.00001) # do not hog the processor power
-
             if init_level == 0 :
                 b = ord(ser.read(1))
                 # start byte
                 if b == 0xFA :
                     init_level = 1
-                    # print datetime.datetime.now(),lidarData
-                    #print "-----------------------------------"
-                else:
-                    init_level = 0
             elif init_level == 1:
                 # position index
                 b = ord(ser.read(1))
