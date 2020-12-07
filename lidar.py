@@ -13,6 +13,7 @@ lidarData = [[100000000, 0] for i in range(360)] #A list of 360 elements Angle, 
 
 
 def plot_radial(q):
+    """visualization of lidar point in polar exis"""
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='polar' )
     ax.set_ylim(0, 4000)
@@ -23,17 +24,21 @@ def plot_radial(q):
     sc = ax.scatter(theta, data, cmap='hsv')
 
     while True:
-        data = np.array(q.get())
+        data = q.get()
+        if not data:
+            return
+        data = np.array(data)
         sc.set_offsets(np.c_[theta, data[:,0]])
         plt.draw()
-        plt.pause(0.01)
+        plt.pause(0.1)
 
 def update_view(packet):
-    """Updates the view of a sample.
-Takes the angle (an int, from 0 to 359) and the list of four bytes of data in the order they arrived.
-"""
+    """
+    Updates the view of a sample.
+    """
     angle = packet.get_index() * 4
 
+    # put mesurements to buffer
     for i, mesure in enumerate(packet.data):
         lidarData[angle] = [mesure.distance, mesure.signal_strength]
         angle += 1
@@ -92,17 +97,18 @@ packet.cs_buf = (ctypes.c_uint16 * 10).from_buffer(packet)
 
 
 def read_Lidar():
+    """read lidar data from port"""
     nb_errors = 0
     init_level = 0
     while True:
         try:
+            # start byte
             if init_level == 0:
                 buff[0] = ser.read()
-                # start byte
                 if packet.start == 0xFA :
                     init_level = 1
+            # position index
             elif init_level == 1:
-                # position index
                 buff[1] = ser.read()
                 if packet.index >= 0xA0 and packet.index <= 0xF9:
                     init_level = 2
@@ -113,10 +119,8 @@ def read_Lidar():
                 for i, b in enumerate(ser.read(20)):
                     buff[i + 2] = b
 
-                # print(packet.start, packet.index, packet.speed)
-                # verify that the received checksum is equal to the one computed from the data
+                # check cs
                 if packet.chech_cs():
-                    # print('speed:', packet.get_speed())
                     update_view(packet)
                 else:
                     # the checksum does not match, something went wrong...
@@ -127,8 +131,6 @@ def read_Lidar():
                 init_level = 0
         except KeyboardInterrupt:
             print ("KeyBoard interrupt")
-            job_for_another_core.terminate()
-            job_for_another_core.join()
             break
         except Exception:
             traceback.print_exc(file=sys.stdout)
@@ -140,5 +142,6 @@ if __name__ == "__main__":
     job_for_another_core = multiprocessing.Process(target=plot_radial,args=((q,)))
     job_for_another_core.start()
     read_Lidar()
+    q.put(None)
     ser.close()
-    os._exit(0)
+    job_for_another_core.join()
